@@ -34,7 +34,8 @@ import {
   SlidersHorizontal,
   Flame
 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { geminiCircuitBreaker } from '../services/circuitBreaker';
+import { policyEngine } from '../services/policyEngine';
 
 interface AdminCockpitProps {
   tenants: TenantProfile[];
@@ -56,21 +57,21 @@ interface AdminCockpitProps {
 const MODEL_ROUTER_RULES: ModelRouterRule[] = [
   {
     complexity: 'SIMPLE_5_STAR_NO_TEXT',
-    modelAssigned: 'Tier 1 Micro-Template Engine (Static + Interpolation)',
+    modelAssigned: 'Tier 1 Micro-Template Engine (Deterministic Static)',
     estimatedCostPerCallEur: 0.0001,
     strategy: '100% deterministisch zonder LLM overhead. Bespaart 99% kosten.',
   },
   {
     complexity: 'POSITIVE_WITH_TEXT',
-    modelAssigned: 'Tier 2 Gemini 2.5 Flash (Fast Tone Injection)',
+    modelAssigned: 'Tier 2 Gemini 2.5 Flash (Fast Tone & SEO Injection)',
     estimatedCostPerCallEur: 0.001,
     strategy: 'Snelle respons met lokale SEO termen en persoonlijke waardering.',
   },
   {
     complexity: 'CRITICAL_1_2_STAR',
-    modelAssigned: 'Tier 3 Deep Reasoner & De-escalator (Gemini 2.5 Flash Deep Prompting)',
+    modelAssigned: 'Tier 3 Deep Reasoner & De-escalator (Gemini 2.5 Flash Deep)',
     estimatedCostPerCallEur: 0.005,
-    strategy: 'Empathie-analyse, offline escalatie & WhatsApp draft naar ondernemer.',
+    strategy: 'Empathie-analyse, offline escalatie & WhatsApp alert naar ondernemer.',
   },
 ];
 
@@ -119,6 +120,9 @@ export const AdminCockpit: React.FC<AdminCockpitProps> = ({
     const matchesPlan = selectedPlanFilter === 'ALL' || t.plan === selectedPlanFilter;
     return matchesSearch && matchesPlan;
   });
+
+  const cbStatus = geminiCircuitBreaker.getStatus();
+  const recentAudits = policyEngine.getAuditTrail().slice(0, 5);
 
   const handleCreateTenant = (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,13 +199,13 @@ export const AdminCockpit: React.FC<AdminCockpitProps> = ({
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-              Superadmin Master Cockpit (God Mode)
+              OrionX Superadmin Control Cockpit
             </span>
-            <span className="text-xs text-slate-400">Volledige grip op omzet, unit economics &amp; churn</span>
+            <span className="text-xs text-slate-400">Hardened Security • Zero-Leakage Runtime</span>
           </div>
-          <h2 className="text-xl font-bold text-white mt-1">Project LevelPlay: Bedrijfs- &amp; Financiële Cockpit</h2>
+          <h2 className="text-xl font-bold text-white mt-1">OrionX-AI: Bedrijfs- &amp; Financiële Cockpit</h2>
           <p className="text-xs text-slate-300 max-w-2xl mt-1">
-            Bewaak de 80%+ brutomarge per klant, live achtergrond worker daemon en zelf-optimaliserende prompt evaluaties.
+            Bewaak de 80%+ brutomarge per klant, live achtergrond worker daemon en beleidsmatige audit trails.
           </p>
         </div>
 
@@ -237,15 +241,15 @@ export const AdminCockpit: React.FC<AdminCockpitProps> = ({
           </button>
 
           <button
-            onClick={() => setCircuitBreaker(p => ({ ...p, isTriggered: !p.isTriggered }))}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              circuitBreaker.isTriggered
-                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/40 animate-pulse'
-                : 'bg-rose-950/60 border border-rose-500/40 text-rose-300 hover:bg-rose-900/60'
-            }`}
+            onClick={() => {
+              geminiCircuitBreaker.manualReset();
+              setCircuitBreaker(p => ({ ...p, isTriggered: false }));
+            }}
+            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1"
+            title="Reset circuit breaker failure counts"
           >
-            <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
-            <span>{circuitBreaker.isTriggered ? 'STOP ACTIEF' : 'NOODREM API'}</span>
+            <RotateCcw className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Reset CB</span>
           </button>
         </div>
       </div>
@@ -283,47 +287,66 @@ export const AdminCockpit: React.FC<AdminCockpitProps> = ({
 
         <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>Daemon Taken &amp; Auto-Tuning</span>
+            <span>Circuit Breaker Status</span>
             <Zap className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="text-2xl font-bold text-white mt-2 font-mono">
-            {daemonState?.tasksCompletedTotal || 148}
+          <div className="text-lg font-bold text-white mt-2 font-mono flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${cbStatus.state === 'CLOSED' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+            <span>{cbStatus.state}</span>
           </div>
-          <span className="text-[11px] text-emerald-400 mt-1 block">
-            {daemonState?.autoTuningCyclesRun || 6} prompt tuning cycli uitgevoerd
+          <span className="text-[11px] text-slate-400 mt-1 block">
+            Failures: {cbStatus.failuresCount}/{cbStatus.failureThreshold} (Reset: 15s)
           </span>
         </div>
       </div>
 
-      {/* Model Router Architecture: 70% Kostenbesparing */}
-      <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-              Model Router Switch: Review-Complexiteit &amp; Marges
+      {/* Model Router & Policy Audit Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span>Model Router Tiering Matrix</span>
             </h3>
+            <span className="text-[10px] text-emerald-400 font-mono">Cost Optimized</span>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            Bespaart 70%+ op LLM-kosten
-          </span>
+          <div className="space-y-2">
+            {MODEL_ROUTER_RULES.map((rule, idx) => (
+              <div key={idx} className="p-3 bg-slate-950 rounded-xl border border-slate-800/80 text-xs">
+                <div className="flex items-center justify-between font-mono">
+                  <span className="text-amber-400 font-bold">{rule.complexity}</span>
+                  <span className="text-emerald-400">€{rule.estimatedCostPerCallEur}</span>
+                </div>
+                <div className="text-slate-300 font-medium mt-0.5">{rule.modelAssigned}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">{rule.strategy}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {MODEL_ROUTER_RULES.map((rule, idx) => (
-            <div key={idx} className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-amber-400 text-[10px] font-bold">
-                  {rule.complexity.replace(/_/g, ' ')}
-                </span>
-                <span className="font-mono text-emerald-400 font-bold">
-                  € {rule.estimatedCostPerCallEur} / call
-                </span>
-              </div>
-              <div className="font-semibold text-white">{rule.modelAssigned}</div>
-              <p className="text-slate-400 text-[11px] leading-relaxed">{rule.strategy}</p>
-            </div>
-          ))}
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldAlert className="w-4 h-4 text-indigo-400" />
+              <span>Recente Policy &amp; Audit Besluiten</span>
+            </h3>
+            <span className="text-[10px] text-slate-400 font-mono">Immutable Log</span>
+          </div>
+          <div className="space-y-2">
+            {recentAudits.length === 0 ? (
+              <div className="text-xs text-slate-500 py-6 text-center italic">Geen recente policy audits</div>
+            ) : (
+              recentAudits.map((aud) => (
+                <div key={aud.eventId} className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-indigo-300 font-semibold">[{aud.decision}] {aud.action}</span>
+                    <span className="text-slate-500 text-[10px]">{new Date(aud.timestamp).toLocaleTimeString('nl-NL')}</span>
+                  </div>
+                  <div className="text-slate-400">{aud.reason}</div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
