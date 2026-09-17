@@ -1,3 +1,7 @@
+/**
+ * OrionX-AI Core Domain Types & Contracts
+ */
+
 export enum AgentCluster {
   STRATEGY = 'STRATEGY',
   BUILD = 'BUILD',
@@ -13,65 +17,88 @@ export enum AgentStatus {
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED',
   BLOCKED = 'BLOCKED',
+  QUARANTINED = 'QUARANTINED',
 }
 
-export interface SwarmAgent {
-  id: string;
-  name: string;
-  role: string;
-  cluster: AgentCluster;
-  tools: string[];
-  directive: string;
-  outputFormat: string;
-  status: AgentStatus;
-  executionCount: number;
-  lastOutput?: string;
-  lastExecutionTime?: string;
+export enum AgentCapability {
+  READ_DATABASE = 'READ_DATABASE',
+  WRITE_DATABASE = 'WRITE_DATABASE',
+  CALL_LLM = 'CALL_LLM',
+  CALL_EXTERNAL_API = 'CALL_EXTERNAL_API',
+  CREATE_TASK = 'CREATE_TASK',
+  DEPLOY_CODE = 'DEPLOY_CODE',
+  EXECUTE_REFUND = 'EXECUTE_REFUND',
+  SEND_MESSAGES = 'SEND_MESSAGES',
+  OVERRIDE_GUARDRAILS = 'OVERRIDE_GUARDRAILS',
 }
 
-export interface SwarmLog {
-  id: string;
-  timestamp: string;
-  agentId: string;
-  agentName: string;
-  level: 'info' | 'warn' | 'error' | 'success';
-  message: string;
-  dataSnippet?: string;
+export enum PolicyDecision {
+  ALLOW = 'ALLOW',
+  DENY = 'DENY',
+  REQUIRE_APPROVAL = 'REQUIRE_APPROVAL',
 }
 
-export interface MilestoneTask {
-  id: string;
-  title: string;
-  agent: string;
-  completed: boolean;
-  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+export enum CircuitBreakerStateEnum {
+  CLOSED = 'CLOSED',
+  OPEN = 'OPEN',
+  HALF_OPEN = 'HALF_OPEN',
 }
-
-export interface Milestone {
-  id: number;
-  title: string;
-  hours: string;
-  description: string;
-  tasks: MilestoneTask[];
-  injectedByRnD?: boolean;
-}
-
-/* ==========================================================
-   MONETIZATION & CLIENT EXPERIENCE INTERFACES
-   ========================================================== */
 
 export type SubscriptionTier = 'STARTER' | 'PRO' | 'MULTI_LOCATION';
 
-export interface SubscriptionPlan {
-  id: SubscriptionTier;
+export interface ExecutionBudget {
+  timeLimitMs: number;
+  tokenBudget: number;
+  costBudgetEur: number;
+  maxChildTasks: number;
+}
+
+export interface AgentMetadata {
+  id: string;
   name: string;
-  priceEur: number;
-  billingPeriod: 'month';
-  badge?: string;
-  features: string[];
-  maxTenants: number;
-  maxReviewsPerMonth: number | 'unlimited';
-  whatsAppCredits: number;
+  version: string;
+  cluster: AgentCluster;
+  description: string;
+  allowedCapabilities: AgentCapability[];
+  directive: string;
+  outputContract: string;
+  budget: ExecutionBudget;
+}
+
+export interface AgentContext {
+  tenantId: string;
+  correlationId: string;
+  initiatedBy: string;
+  depth: number;
+  timestamp: string;
+}
+
+export interface AgentTask {
+  taskId: string;
+  agentId: string;
+  tenantId: string;
+  correlationId: string;
+  inputPayload: Record<string, unknown>;
+  priority: 'CRITICAL' | 'HIGH' | 'NORMAL' | 'LOW';
+  createdAt: string;
+  timeoutMs: number;
+  maxAttempts: number;
+  currentAttempt: number;
+}
+
+export interface AgentResult {
+  taskId: string;
+  agentId: string;
+  executionId: string;
+  status: AgentStatus;
+  outputPayload?: Record<string, unknown>;
+  rawOutput?: string;
+  tokenCostEur: number;
+  tokensConsumed: number;
+  executionDurationMs: number;
+  criticApproved: boolean;
+  criticRemarks?: string;
+  errorMessage?: string;
 }
 
 export interface TenantProfile {
@@ -101,13 +128,6 @@ export interface TenantProfile {
   tokenSavingsPercent?: number;
 }
 
-export interface ModelRouterRule {
-  complexity: 'SIMPLE_5_STAR_NO_TEXT' | 'POSITIVE_WITH_TEXT' | 'CRITICAL_1_2_STAR';
-  modelAssigned: string;
-  estimatedCostPerCallEur: number;
-  strategy: string;
-}
-
 export interface LocalReview {
   id: string;
   tenantId: string;
@@ -124,108 +144,41 @@ export interface LocalReview {
   repliedAt?: string;
   routerTierUsed?: string;
   tokenCostEur?: number;
-  escalationWhatsAppStatus?: 'SENT' | 'CONFIRMED' | 'EDITED';
+  criticVerified?: boolean;
 }
 
-export interface ColdAuditReport {
-  id: string;
-  businessName: string;
-  city: string;
-  niche: string;
-  currentRating: number;
-  unansweredReviewsCount: number;
-  estimatedMonthlyLeadLoss: number;
-  sampleUnansweredReview: {
-    author: string;
-    rating: number;
-    comment: string;
-    date: string;
-  };
-  sampleAiResponse: string;
-  outreachMessageTemplate: string;
-  generatedAt: string;
+export interface CircuitBreakerStatus {
+  serviceName: string;
+  state: CircuitBreakerStateEnum;
+  failuresCount: number;
+  failureThreshold: number;
+  lastFailureTime?: number;
+  resetTimeoutMs: number;
 }
 
-/* ==========================================================
-   AUTONOMOUS WORKER DAEMON & WEBHOOK INGEST
-   ========================================================== */
+export interface RuntimeMetrics {
+  totalRequests: number;
+  successfulTasks: number;
+  failedTasks: number;
+  quarantinedAgentsCount: number;
+  totalTokensConsumed: number;
+  totalEstimatedCostEur: number;
+  avgLatencyMs: number;
+  circuitBreakers: CircuitBreakerStatus[];
+}
 
-export interface DaemonQueueTask {
-  id: string;
-  type: 'PROCESS_REVIEW' | 'OPTIMIZE_PROMPT' | 'AUDIT_CHURN';
+export interface AuditEvent {
+  eventId: string;
+  timestamp: string;
+  actorType: 'SYSTEM' | 'AGENT' | 'OPERATOR';
+  actorId: string;
   tenantId: string;
-  businessName: string;
-  reviewId?: string;
-  rating?: number;
-  comment?: string;
-  author?: string;
-  queuedAt: string;
-  retries: number;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
-  resultSnippet?: string;
+  action: string;
+  resource: string;
+  decision: PolicyDecision;
+  reason: string;
+  correlationId: string;
 }
-
-export interface PromptTuningReport {
-  id: string;
-  tenantId: string;
-  businessName: string;
-  timestamp: string;
-  previousTokenAvg: number;
-  optimizedTokenAvg: number;
-  savingsPercent: number;
-  recommendation: string;
-  newInstruction: string;
-}
-
-export interface CircuitBreakerState {
-  totalBudgetEur: number;
-  spentBudgetEur: number;
-  hourlyCalls: number;
-  maxHourlyCalls: number;
-  maxIterLimit: number;
-  isTriggered: boolean;
-  freezeAllTenants: boolean;
-}
-
-/* ==========================================================
-   SELF-HEALING (CLUSTER 2) INTERFACES
-   ========================================================== */
-
-export interface IncidentEvent {
-  id: string;
-  timestamp: string;
-  service: string;
-  errorType: string;
-  message: string;
-  stackTrace: string;
-  contextPayload?: string;
-  status: 'detecting' | 'red_teaming' | 'analyzing' | 'patching' | 'verifying' | 'healed' | 'escalated';
-  rootCause?: string;
-  redTeamReproductionTest?: string;
-  codePatchDiff?: string;
-  vectorRunbookId?: string;
-  postMortemSummary?: string;
-  newGuardrailRule?: string;
-  adversarialCheckPassed?: boolean;
-  fileLockPreempted?: boolean;
-}
-
-export interface VectorMemoryEntry {
-  id: string;
-  timestamp: string;
-  errorSignature: string;
-  rootCause: string;
-  solutionDiff: string;
-  guardrailEnforced: string;
-  confidenceRating: number;
-  decayDaysLeft: number;
-  timesApplied: number;
-  similarityScore?: number;
-}
-
-/* ==========================================================
-   R&D & INVARIANT CORE ARCHITECTURE (CLUSTER 3) INTERFACES
-   ========================================================== */
 
 export interface InvariantCoreConstraints {
   immutableDomain: string;
@@ -233,77 +186,4 @@ export interface InvariantCoreConstraints {
   allowedTechStack: string[];
   maxMonthlyBudgetEur: number;
   humanInTheLoopRequiredForPivots: boolean;
-}
-
-export interface RnDHypothesis {
-  id: string;
-  timestamp: string;
-  title: string;
-  sourceObservation: string;
-  proposedFeature: string;
-  targetMetric: string;
-  scores: {
-    ltvCacImpact: number;
-    zeroTouchFeasibility: number;
-    tokenGrossMargin: number;
-    overallScore: number;
-  };
-  invariantCheck: {
-    passed: boolean;
-    violatesDomainConstraint?: boolean;
-    violatesMarginConstraint?: boolean;
-    notes?: string;
-  };
-  decision: 'APPROVED_AND_INJECTED' | 'REJECTED_LOW_ROI' | 'BLOCKED_BY_INVARIANT_CORE' | 'PENDING_HUMAN_APPROVAL';
-  rejectionReason?: string;
-  injectedMilestoneSpec?: {
-    milestoneTitle: string;
-    taskTitle: string;
-    agentAssigned: string;
-  };
-}
-
-/* ==========================================================
-   DISTRIBUTED FILE LOCKS & DAEMONS
-   ========================================================== */
-
-export interface FileLock {
-  filePath: string;
-  lockedByAgent: string;
-  cluster: AgentCluster;
-  leaseExpiresInSeconds: number;
-  isHotfixPreempted: boolean;
-}
-
-export interface DaemonState {
-  daemonHealerStatus: 'LISTENING_ACTIVE' | 'SANDBOX_RUNNING' | 'STANDBY';
-  cronEvolutionStatus: 'SCHEDULED_00_00_UTC' | 'SCANNING_CHURN' | 'COMPLETED';
-  activeFileLocks: FileLock[];
-  activeSandboxesCount: number;
-  queueLength: number;
-  tasksCompletedTotal: number;
-  autoTuningCyclesRun: number;
-}
-
-/* ==========================================================
-   CHRONICLER & SYSTEM JOURNAL (CLUSTER 4) INTERFACES
-   ========================================================== */
-
-export interface ADRRecord {
-  id: string;
-  title: string;
-  date: string;
-  status: 'Accepted' | 'Proposed' | 'Superseded';
-  context: string;
-  decision: string;
-  consequences: string;
-}
-
-export interface AuditTrailEntry {
-  id: string;
-  timestamp: string;
-  agent: string;
-  actionType: 'SELF_HEAL_PATCH' | 'PLAN_PIVOT' | 'CODE_MERGE' | 'SAFETY_TRIP' | 'GUARDRAIL_INJECTION' | 'ADVERSARIAL_REPRO_TEST' | 'FILE_LOCK_PREEMPTION' | 'PROMPT_TUNED';
-  summary: string;
-  gitCommitHash: string;
 }
