@@ -1,7 +1,7 @@
 /**
  * OrionX-AI Model Router
- * Directs AI generation requests to appropriate cost/quality tiers.
- * Prevents UI components from importing provider SDKs directly.
+ * Central dispatch for LLM generation requests with 3-tier cost routing.
+ * Ensures business services and UI components never invoke provider SDKs directly.
  */
 
 import { GoogleGenAI } from '@google/genai';
@@ -16,6 +16,7 @@ export interface ModelRequest {
   temperature?: number;
   maxTokens?: number;
   correlationId?: string;
+  responseMimeType?: string;
 }
 
 export interface ModelResponse {
@@ -54,13 +55,13 @@ class ModelRouter {
       };
     }
 
-    // 2. Check Circuit Breaker
+    // 2. Circuit Breaker Check
     if (!geminiCircuitBreaker.canExecute()) {
-      logger.warn('model_router', 'circuit_open_fallback', 'Circuit open, applying static resilient fallback');
+      logger.warn('model_router', 'circuit_open_fallback', 'Circuit open, applying resilient fallback');
       return {
-        text: 'Dank voor uw feedback. We hebben uw bericht ontvangen en nemen zo nodig spoedig contact met u op.',
+        text: 'Dank voor uw feedback. We hebben uw bericht ontvangen en nemen zo nodig contact met u op.',
         tierUsed: 'CIRCUIT_BREAKER_FALLBACK',
-        estimatedCostEur: 0.0000,
+        estimatedCostEur: 0.0,
         tokensConsumed: 0,
         durationMs: Date.now() - startTime,
       };
@@ -71,14 +72,20 @@ class ModelRouter {
       const ai = this.getClient();
       const model = 'gemini-2.5-flash';
 
+      const config: Record<string, unknown> = {
+        systemInstruction: req.systemInstruction,
+        temperature: req.temperature ?? (req.tier === 'TIER_3_DEEP' ? 0.2 : 0.7),
+        maxOutputTokens: req.maxTokens || 600,
+      };
+
+      if (req.responseMimeType) {
+        config.responseMimeType = req.responseMimeType;
+      }
+
       const response = await ai.models.generateContent({
         model,
         contents: req.prompt,
-        config: {
-          systemInstruction: req.systemInstruction,
-          temperature: req.temperature ?? (req.tier === 'TIER_3_DEEP' ? 0.2 : 0.7),
-          maxOutputTokens: req.maxTokens || 400,
-        },
+        config: config as any,
       });
 
       geminiCircuitBreaker.recordSuccess();
@@ -91,7 +98,7 @@ class ModelRouter {
         text: outputText,
         tierUsed: req.tier,
         estimatedCostEur: cost,
-        tokensConsumed: Math.round(outputText.length / 4) + 100,
+        tokensConsumed: Math.round(outputText.length / 4) + 120,
         durationMs,
       };
     } catch (err: unknown) {
